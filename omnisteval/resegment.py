@@ -29,7 +29,6 @@ from typing import Dict, List, Optional, Tuple
 from .alignment import Word, align_words
 from .data import Instance
 from .tokenization import tokenize_words
-from .scoring import evaluate_instances
 
 logger = logging.getLogger(__name__)
 

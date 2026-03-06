@@ -27,7 +27,7 @@ Provides scorers for BLEU, chrF, COMET (quality) and YAAL (latency).
 import logging
 import math
 from statistics import mean
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from sacrebleu.metrics.bleu import BLEU
 from sacrebleu.metrics.chrf import CHRF
@@ -157,7 +157,6 @@ class ALScorer:
         for ins in instances:
             delays = getattr(ins, "emission_ca" if self.computation_aware else "emission_cu", None)
             if delays is None or len(delays) == 0:
-                logger.warning(f"Instance {ins.index} has no emission timestamps. Skipped.")
                 continue
             score = self.compute(ins)
             if score is not None:
@@ -198,7 +197,6 @@ class APScorer:
         for ins in instances:
             delays = getattr(ins, "emission_ca" if self.computation_aware else "emission_cu", None)
             if delays is None or len(delays) == 0:
-                logger.warning(f"Instance {ins.index} has no emission timestamps. Skipped.")
                 continue
             source_length = getattr(ins, "source_length", None)
             tgt_len = len(delays) if ins.reference is None else ins.reference_length
@@ -219,7 +217,6 @@ class DALScorer:
         for ins in instances:
             delays = getattr(ins, "emission_ca" if self.computation_aware else "emission_cu", None)
             if delays is None or len(delays) == 0:
-                logger.warning(f"Instance {ins.index} has no emission timestamps. Skipped.")
                 continue
             source_length = getattr(ins, "source_length", None)
             if source_length is None or source_length == 0:
@@ -303,7 +300,6 @@ class YAALScorer:
         for ins in instances:
             delays = getattr(ins, timestamp_type, None)
             if delays is None or len(delays) == 0:
-                logger.warning(f"Instance {ins.index} has no emission timestamps. Skipped.")
                 continue
             score = self.compute(ins)
             if score is not None:
@@ -374,6 +370,41 @@ class ShortformDegeneracyScorer:
             "degenerate_policy": degenerate,
         }
 
+def report_empty(instances: List[Instance], is_longform: bool) -> List[str]:
+    """Generate an error report for empty instances."""
+    if not instances:
+        return ["No valid instances to evaluate. Please check your input data."]
+
+    def is_empty(ins: Instance) -> bool:
+        return len(ins.prediction.strip()) == 0
+
+    empty_instances = [ins for ins in instances if is_empty(ins)]
+    report = []
+
+    report.append(f"Empty Predictions: {len(empty_instances)}")
+    report.append(f"Total Instances:   {len(instances)}")
+    if len(empty_instances) > 0:
+        if is_longform:
+            report.append(
+                "\nFor long-form evaluation, empty predictions may naturally occur for segments with short references\n"
+                "due to resegmentation or segments containing non-speech content such as music or silence.\n"
+                "However, if many segments or segments with substantial references have empty predictions,\n"
+                "this may indicate an issue with SimulST system or resegmentation."
+            )
+        report.append("\n\nInstances with empty predictions:")
+        report.append("----------------------------------------------------------------")
+
+    for i, ins in enumerate(empty_instances):
+        if hasattr(ins, "docid") and hasattr(ins, "segid"):
+            index = f"{getattr(ins, 'docid')}:{getattr(ins, 'segid')}"
+        elif hasattr(ins, "index"):
+            index = str(ins.index)
+        else:
+            index = f"instance_{i}"
+        report.append(f"Instance {index} with reference '{ins.reference}' has an empty prediction.")
+
+    return report
+
 
 def evaluate_instances(
     instances: List[Instance],
@@ -386,7 +417,7 @@ def evaluate_instances(
     compute_comet: bool = False,
     comet_model: str = "Unbabel/wmt22-comet-da",
     source_sentences: Optional[List[str]] = None,
-) -> Dict[str, float]:
+) -> Tuple[Dict[str, float], List[str]]:
     """
     Evaluate resegmented instances with the selected metrics.
 
@@ -403,9 +434,10 @@ def evaluate_instances(
         source_sentences: Source sentences for COMET scoring.
 
     Returns:
-        Dictionary of metric names to scores.
+        Tuple of metric names to scores and error report.
     """
     scores: Dict[str, float] = {}
+    report: List[str] = []
 
     if compute_quality:
         scores["bleu"] = SacreBLEUScorer(bleu_tokenizer)(instances)
@@ -456,9 +488,11 @@ def evaluate_instances(
                 "No instances have computation-aware emission timestamps (CA)."
             )
 
+    report = report_empty(instances, is_longform)
+
     # Shortform-only degeneracy diagnostics
     if compute_latency and not is_longform:
         degeneracy = ShortformDegeneracyScorer()(instances)
         scores.update(degeneracy)
 
-    return scores
+    return scores, report

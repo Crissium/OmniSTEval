@@ -196,7 +196,7 @@ def dump_scores_tsv(scores: Dict[str, float], output_folder: str, is_longform: b
             f.write(f"{name}\t{val_str}\n")
 
 
-def format_report(mode_label: str, settings: dict, scores: dict) -> str:
+def format_report(mode_label: str, settings: dict, scores: dict, instance_report: List[str]) -> str:
     """Return a human-readable evaluation report string.
 
     This mirrors the previous CLI formatting.
@@ -234,6 +234,11 @@ def format_report(mode_label: str, settings: dict, scores: dict) -> str:
         if scores.get("degenerate_policy") == 1.0:
             lines.append("  *** Likely Degenerate Simultaneous Policy ***")
             lines.append("")
+
+    # Append instance report
+    lines.append("Instance-level Details")
+    lines.append("-" * 64)
+    lines.extend(instance_report)
 
     lines.append("=" * 64)
     return "\n".join(lines)

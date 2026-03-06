@@ -32,4 +32,32 @@ Scores
   LongAP (CA)    4.0568
   LongDAL (CA)   3496.1945
 
+Instance-level Details
+----------------------------------------------------------------
+Empty Predictions: 15
+Total Instances:   2641
+
+For long-form evaluation, empty predictions may naturally occur for segments with short references
+due to resegmentation or segments containing non-speech content such as music or silence.
+However, if many segments or segments with substantial references have empty predictions,
+this may indicate an issue with SimulST system or resegmentation.
+
+
+Instances with empty predictions:
+----------------------------------------------------------------
+Instance 115 with reference 'Vielen Dank.' has an empty prediction.
+Instance 118 with reference 'AB: Vielen Dank.' has an empty prediction.
+Instance 150 with reference 'MS: 1,5 Millionen. (DC: Okay.)' has an empty prediction.
+Instance 159 with reference 'MK: Ich kann helfen.' has an empty prediction.
+Instance 224 with reference 'Mann 3: Ich bin der Schmusetyp.' has an empty prediction.
+Instance 315 with reference 'June Cohen: Nun, Morgan, im Namen der Transparenz dies: Was ist nun genau mit den $7100 passiert?' has an empty prediction.
+Instance 319 with reference '(Applaus)' has an empty prediction.
+Instance 612 with reference '(Musik)' has an empty prediction.
+Instance 631 with reference 'Sie können das die ganze Zeit machen.' has an empty prediction.
+Instance 1131 with reference '(Musik)' has an empty prediction.
+Instance 1133 with reference 'Ich danke Ihnen.' has an empty prediction.
+Instance 2005 with reference '♫ ♫ Everybody 's looking forward to the weekend, weekend.' has an empty prediction.
+Instance 2006 with reference '♫ ♫ Friday, Friday.' has an empty prediction.
+Instance 2040 with reference '(Video) Bear Vasquez: Was bedeutet das?' has an empty prediction.
+Instance 2628 with reference '(klirren)' has an empty prediction.
 ================================================================

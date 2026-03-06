@@ -313,9 +313,9 @@ We will discuss what lexical borrowing is.
 
 - `source` — audio filename as a string (e.g., `"recording.wav"`), or an array with the recording name as the first element (e.g., `["recording.wav"]`) for backward compatibility with SimulEval logs
 - `prediction` — the full hypothesis text
-- `delays` — per-token computation-unaware emission timestamps (in ms); length must match the number of words (or characters if `--char_level`) in `prediction`
+- `delays` — (optional) per-token computation-unaware emission timestamps (in ms); length must match the number of words (or characters if `--char_level`) in `prediction`
 - `elapsed` — (optional) per-token computation-aware emission timestamps (in ms)
-- `source_length` — (optional, but highly recommended) total recording length in ms
+- `source_length` — (optional, but highly recommended for reliable YAAL/LongYAAL latency evaluation) total recording length in ms
 
 The key names for `delays` and `elapsed` can be customized with `--emission_cu_key` and `--emission_ca_key`.
 
@@ -331,7 +331,7 @@ We will discuss what lexical borrowing is.
 - What is read from the SimulStream log:
   - `final_text` — the final hypothesis string for the recording (normalized and tokenized according to `--char_level`).
   - `ideal_delays` — per-unit computation-unaware delays (units in seconds inside SimulStream). These are converted to milliseconds by OmniSTEval (`cu * 1000`) and used as `emission_cu`.
-  - `computational_aware_delays` — optional per-unit computation-aware delays (seconds); when present they are converted to ms and used as `emission_ca`. If absent, only CU delays are available.
+  - `computational_aware_delays` — per-unit computation-aware delays (seconds). These are converted to ms and used as `emission_ca`.
 
 - Notes:
   - Install the `simulstream` package to enable this mode: `pip install simulstream`.
@@ -355,13 +355,13 @@ Each run prints a human-readable evaluation report to stdout:
 
 ```
 ================================================================
-OmniSTEval v0.1.3  |  Longform evaluation (resegmentation)
+OmniSTEval v0.1.3  |  Longform evaluation (with resegmentation)
 ================================================================
 
 Settings
 ----------------------------------------------------------------
-  Hypothesis         instances.log
-  Hypothesis format  jsonl
+  Hypothesis         simulstream_log.jsonl
+  Hypothesis format  simulstream
   Reference          references.txt
   Segmentation       ref_segments.yaml
   Seg. type          speech
@@ -369,25 +369,53 @@ Settings
   BLEU tokenizer     13a
   Char-level         no
   Offset delays      no
-  Fix CA emissions   yes
+  Fix CA emissions   no
   Metrics            quality, latency
   Version            0.1.3
 
 Scores
 ----------------------------------------------------------------
-  BLEU           22.9418
-  chrF           52.1659
-  LongYAAL (CU)  2969.2223
-  LongAL (CU)    3000.5570
-  LongLAAL (CU)  3102.8672
-  LongAP (CU)    1.0506
-  LongDAL (CU)   4130.1372
-  LongYAAL (CA)  5905.4040
-  LongAL (CA)    6100.6042
-  LongLAAL (CA)  6159.5048
-  LongAP (CA)    1.7176
-  LongDAL (CA)   7409.7906
+  BLEU           26.9845
+  chrF           55.2428
+  LongYAAL (CU)  2194.0496
+  LongAL (CU)    2500.9289
+  LongLAAL (CU)  2566.8508
+  LongAP (CU)    3.8295
+  LongDAL (CU)   3194.7830
+  LongYAAL (CA)  2466.8468
+  LongAL (CA)    2800.4354
+  LongLAAL (CA)  2860.0414
+  LongAP (CA)    4.0568
+  LongDAL (CA)   3496.1945
 
+Instance-level Details
+----------------------------------------------------------------
+Empty Predictions: 15
+Total Instances:   2641
+
+For long-form evaluation, empty predictions may naturally occur for segments with short references
+due to resegmentation or segments containing non-speech content such as music or silence.
+However, if many segments or segments with substantial references have empty predictions,
+this may indicate an issue with SimulST system or resegmentation.
+
+
+Instances with empty predictions:
+----------------------------------------------------------------
+Instance 115 with reference 'Vielen Dank.' has an empty prediction.
+Instance 118 with reference 'AB: Vielen Dank.' has an empty prediction.
+Instance 150 with reference 'MS: 1,5 Millionen. (DC: Okay.)' has an empty prediction.
+Instance 159 with reference 'MK: Ich kann helfen.' has an empty prediction.
+Instance 224 with reference 'Mann 3: Ich bin der Schmusetyp.' has an empty prediction.
+Instance 315 with reference 'June Cohen: Nun, Morgan, im Namen der Transparenz dies: Was ist nun genau mit den $7100 passiert?' has an empty prediction.
+Instance 319 with reference '(Applaus)' has an empty prediction.
+Instance 612 with reference '(Musik)' has an empty prediction.
+Instance 631 with reference 'Sie können das die ganze Zeit machen.' has an empty prediction.
+Instance 1131 with reference '(Musik)' has an empty prediction.
+Instance 1133 with reference 'Ich danke Ihnen.' has an empty prediction.
+Instance 2005 with reference '♫ ♫ Everybody 's looking forward to the weekend, weekend.' has an empty prediction.
+Instance 2006 with reference '♫ ♫ Friday, Friday.' has an empty prediction.
+Instance 2040 with reference '(Video) Bear Vasquez: Was bedeutet das?' has an empty prediction.
+Instance 2628 with reference '(klirren)' has an empty prediction.
 ================================================================
 ```
 
