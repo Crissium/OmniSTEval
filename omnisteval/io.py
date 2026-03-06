@@ -7,6 +7,7 @@ logic used by the CLI and resegmentation pipeline.
 from typing import List, Tuple, Optional, Dict
 import json
 import os
+import logging
 
 from .data import (
     Instance,
@@ -19,34 +20,46 @@ from .data import (
 )
 from . import __version__
 
+logger = logging.getLogger(__name__)
 
 def load_shortform_instances(
     hypothesis_file: str,
-    ref_sentences_file: str,
-    emission_cu_key: str = "delays",
-    emission_ca_key: str = "elapsed",
+    ref_sentences_file: Optional[str],
+    emission_cu_key: str,
+    emission_ca_key: str,
     char_level: bool = False,
-) -> Tuple[List[Instance], bool]:
+) -> List[Instance]:
     """Load SimulEval-style shortform JSONL + references and return Instances.
 
-    Returns tuple (instances, all_have_emission_ca).
+    Returns tuple instances.
     """
     with open(hypothesis_file, "r", encoding="utf-8") as f:
         hyp_lines = [json.loads(line.strip()) for line in f if line.strip()]
     assert hyp_lines, f"Hypothesis file is empty: {hypothesis_file}"
 
-    with open(ref_sentences_file, "r", encoding="utf-8") as f:
-        ref_sentences = [line.strip() for line in f]
-    assert len(ref_sentences) == len(hyp_lines), (
-        f"Number of references ({len(ref_sentences)}) does not match number of hypothesis lines ({len(hyp_lines)})."
-    )
+    all_have_reference = hyp_lines and all("reference" in h and len(h["reference"]) > 0 for h in hyp_lines)
 
-    all_have_emission_ca = all(emission_ca_key in h for h in hyp_lines)
+    if ref_sentences_file is not None:
+        if all_have_reference:
+            logger.warning(
+                f"Hypothesis lines already contain 'reference' fields, but {ref_sentences_file} is also provided. "
+                "The reference sentences from the file will be used instead of those in the hypothesis lines."
+            )
+        with open(ref_sentences_file, "r", encoding="utf-8") as f:
+            ref_sentences = [line.strip() for line in f]
+        assert len(ref_sentences) == len(hyp_lines), (
+            f"Number of references ({len(ref_sentences)}) does not match number of hypothesis lines ({len(hyp_lines)})."
+        )
+    elif all_have_reference:
+        ref_sentences = [h["reference"].strip() for h in hyp_lines] 
+    else:
+        raise ValueError("No reference sentences provided. Each hypothesis line must contain a 'reference' field, or a separate reference sentences file must be provided.")
+
     instances: List[Instance] = []
     for i, (h, ref) in enumerate(zip(hyp_lines, ref_sentences)):
         prediction = h.get("prediction", "")
-        cu_values = h.get(emission_cu_key, [])
-        ca_values = h.get(emission_ca_key, list(cu_values))
+        cu_values = h.get(emission_cu_key, None)
+        ca_values = h.get(emission_ca_key, None)
         source_length = h.get("source_length", None)
 
         info: dict = {
@@ -56,27 +69,14 @@ def load_shortform_instances(
         }
         if source_length is not None:
             info["source_length"] = source_length
-        if cu_values:
+        if cu_values is not None:
             info["emission_cu"] = cu_values
-        if ca_values:
+        if ca_values is not None:
             info["emission_ca"] = ca_values
 
         instances.append(Instance.from_dict(info, latency_unit=("char" if char_level else "word")))
 
-    return instances, all_have_emission_ca
-
-
-def load_pre_resegmented_instances(resegmented_file: str, char_level: bool = False) -> Tuple[List[Instance], bool]:
-    with open(resegmented_file, "r", encoding="utf-8") as f:
-        hyp_lines = [json.loads(line.strip()) for line in f if line.strip()]
-    assert hyp_lines, f"Hypothesis file is empty: {resegmented_file}"
-    latency_unit = "char" if char_level else "word"
-    instances = [Instance.from_dict(h, latency_unit=latency_unit) for h in hyp_lines]
-    all_have_emission_ca = all(
-        h.get("emission_ca") is not None and len(h.get("emission_ca", [])) > 0
-        for h in hyp_lines
-    )
-    return instances, all_have_emission_ca
+    return instances
 
 
 def load_resegmentation_inputs(
@@ -91,10 +91,10 @@ def load_resegmentation_inputs(
     emission_cu_key: str = "delays",
     emission_ca_key: str = "elapsed",
     simulstream_config_file: Optional[str] = None,
-) -> Tuple[List[List], List[List], list, List[str], bool]:
+) -> Tuple[List[List], List[List], list, List[str]]:
     """Load inputs required for resegmentation.
 
-    Returns (ref_words, hyp_words, segmentation, ref_sentences, all_have_emission_ca).
+    Returns (ref_words, hyp_words, segmentation, ref_sentences).
     """
     if speech_segmentation is not None:
         ref_words, segmentation, ref_sentences = load_reference(
@@ -103,7 +103,7 @@ def load_resegmentation_inputs(
         segmentation_order = get_segmentation_order(segmentation)
 
         if hypothesis_format == "jsonl":
-            hyp_words, all_have_emission_ca = load_hypothesis_jsonl(
+            hyp_words = load_hypothesis_jsonl(
                 hypothesis_file,
                 char_level,
                 segmentation_order,
@@ -113,11 +113,10 @@ def load_resegmentation_inputs(
             )
         elif hypothesis_format == "text":
             hyp_words = load_hypothesis_text(hypothesis_file, char_level, len(segmentation_order))
-            all_have_emission_ca = False
         elif hypothesis_format == "simulstream":
             if simulstream_config_file is None:
                 raise ValueError("simulstream_config_file must be provided when hypothesis_format is 'simulstream'.")
-            hyp_words, all_have_emission_ca = load_hypothesis_simulstream(
+            hyp_words = load_hypothesis_simulstream(
                 hypothesis_file=hypothesis_file,
                 char_level=char_level,
                 segmentation_order=segmentation_order,
@@ -131,11 +130,10 @@ def load_resegmentation_inputs(
             text_segmentation, ref_sentences_file, char_level
         )
         hyp_words = load_hypothesis_text(hypothesis_file, char_level, num_documents)
-        all_have_emission_ca = False
     else:
         raise ValueError("Either speech_segmentation or text_segmentation must be provided.")
 
-    return ref_words, hyp_words, segmentation, ref_sentences, all_have_emission_ca
+    return ref_words, hyp_words, segmentation, ref_sentences
 
 
 def dump_instances_jsonl(instances_dict_list: List[dict], output_folder: str) -> None:

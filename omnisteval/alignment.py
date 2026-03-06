@@ -61,8 +61,8 @@ class Word:
     """
 
     text: str
-    emission_cu: Optional[float] = None
     seq_id: Optional[int] = None
+    emission_cu: Optional[float] = None
     emission_ca: Optional[float] = None
     main: bool = True
     original: Optional[str] = None

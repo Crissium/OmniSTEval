@@ -40,7 +40,6 @@ from argparse import ArgumentParser
 from .resegment import resegment
 from .io import (
     load_shortform_instances,
-    load_pre_resegmented_instances,
     load_resegmentation_inputs,
     dump_instances_jsonl,
     dump_scores_tsv,
@@ -75,7 +74,6 @@ def _evaluate_and_report(
     settings: dict,
     args,
     is_longform: bool,
-    all_have_emission_ca: bool,
     *,
     source_sentences=None,
 ):
@@ -87,7 +85,6 @@ def _evaluate_and_report(
         instances=instances,
         is_longform=is_longform,
         bleu_tokenizer=args.bleu_tokenizer,
-        all_have_emission_ca=all_have_emission_ca,
         fix_emission_ca_flag=args.fix_simuleval_emission_ca,
         compute_quality=not args.no_quality,
         compute_latency=not args.no_latency,
@@ -443,7 +440,7 @@ def _run_shortform(parser, args):
     if args.comet and args.no_quality:
         logger.warning("--comet is ignored when --no-quality is set.")
 
-    instances, all_have_emission_ca = load_shortform_instances(
+    instances = load_shortform_instances(
         args.hypothesis_file,
         args.ref_sentences_file,
         emission_cu_key=args.emission_cu_key,
@@ -465,7 +462,6 @@ def _run_shortform(parser, args):
         settings=settings,
         args=args,
         is_longform=False,
-        all_have_emission_ca=all_have_emission_ca,
         source_sentences=source_sentences,
     )
 
@@ -504,8 +500,12 @@ def _run_longform(parser, args):
 
     # Two main flows: pre-resegmented evaluation or resegmentation + evaluation.
     if has_resegmented:
-        instances, all_have_emission_ca = load_pre_resegmented_instances(
-            args.resegmented_hypothesis, char_level=args.char_level
+        instances = load_shortform_instances(
+            args.resegmented_hypothesis,
+            ref_sentences_file=None,  # Already included in the resegmented JSONL
+            emission_cu_key=args.emission_cu_key,
+            emission_ca_key=args.emission_ca_key,
+            char_level=args.char_level,
         )
         mode = "pre_resegmented"
     else:
@@ -541,7 +541,7 @@ def _run_longform(parser, args):
             parser.error("--simulstream_config_file is required when --hypothesis_format=simulstream.")
 
         # Load inputs for resegmentation and run it
-        ref_words, hyp_words, segmentation, ref_sentences, all_have_emission_ca = load_resegmentation_inputs(
+        ref_words, hyp_words, segmentation, ref_sentences = load_resegmentation_inputs(
             args.speech_segmentation,
             args.text_segmentation,
             args.ref_sentences_file,
@@ -567,7 +567,6 @@ def _run_longform(parser, args):
             ref_sentences=ref_sentences,
             char_level=args.char_level,
             lang=args.lang,
-            has_emission_timestamps=all_have_emission_ca,
         )
 
         if args.output_folder:
@@ -585,7 +584,6 @@ def _run_longform(parser, args):
         settings,
         args,
         is_longform=True,
-        all_have_emission_ca=all_have_emission_ca,
         source_sentences=source_sentences,
     )
 

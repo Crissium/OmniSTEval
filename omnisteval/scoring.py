@@ -382,7 +382,6 @@ def evaluate_instances(
     compute_latency: bool = True,
     is_longform: bool = True,
     bleu_tokenizer: str = "13a",
-    all_have_emission_ca: bool = False,
     fix_emission_ca_flag: bool = False,
     compute_comet: bool = False,
     comet_model: str = "Unbabel/wmt22-comet-da",
@@ -398,7 +397,6 @@ def evaluate_instances(
         is_longform: Whether to use long-form YAAL (True for resegmented long-form
             outputs, False for short-form segment-level systems).
         bleu_tokenizer: Tokenizer for SacreBLEU.
-        all_have_emission_ca: Whether all instances have computation-aware timestamps.
         fix_emission_ca_flag: Whether computation-aware timestamps were already fixed.
         compute_comet: Whether to compute COMET (requires source_sentences).
         comet_model: COMET model name.
@@ -416,25 +414,30 @@ def evaluate_instances(
             scores["comet"] = COMETScorer(comet_model)(instances, source_sentences)
 
     if compute_latency:
-        ca_unaware = YAALScorer(is_longform=is_longform)(instances)
-        scores["yaal"] = ca_unaware
+        ca_aware_yaal = None
+        ca_unaware_yaal = None
 
         # Add AL/LAAL/AP/DAL (non-CA)
         prefix = "long_" if is_longform else ""
-        try:
-            scores[f"{prefix}al"] = ALScorer(computation_aware=False)(instances)
-            scores[f"{prefix}laal"] = LAALScorer(computation_aware=False)(instances)
-            scores[f"{prefix}ap"] = APScorer(computation_aware=False)(instances)
-            scores[f"{prefix}dal"] = DALScorer(computation_aware=False)(instances)
-        except Exception as e:
-            logger.warning(f"Failed to compute AL/LAAL/AP/DAL: {e}")
-
-        if all_have_emission_ca:
-            ca_aware = YAALScorer(computation_aware=True, is_longform=is_longform)(instances)
-            scores["ca_yaal"] = ca_aware
-
-            # CA variants for other latency scorers
+        any_cu = any(getattr(ins, "emission_cu", None) for ins in instances)
+        if any_cu:
             try:
+                ca_unaware_yaal = scores[f"{prefix}yaal"] = YAALScorer(computation_aware=False, is_longform=is_longform)(instances)
+                scores[f"{prefix}al"] = ALScorer(computation_aware=False)(instances)
+                scores[f"{prefix}laal"] = LAALScorer(computation_aware=False)(instances)
+                scores[f"{prefix}ap"] = APScorer(computation_aware=False)(instances)
+                scores[f"{prefix}dal"] = DALScorer(computation_aware=False)(instances)
+            except Exception as e:
+                logger.warning(f"Failed to compute AL/LAAL/AP/DAL: {e}")
+        else:
+            logger.warning(
+                "No instances have computation-unaware emission timestamps (CU)."
+            )
+
+        any_ca = any(getattr(ins, "emission_ca", None) for ins in instances)
+        if any_ca:
+            try:
+                ca_aware_yaal = scores[f"ca_{prefix}yaal"] = YAALScorer(computation_aware=True, is_longform=is_longform)(instances)
                 scores[f"ca_{prefix}al"] = ALScorer(computation_aware=True)(instances)
                 scores[f"ca_{prefix}laal"] = LAALScorer(computation_aware=True)(instances)
                 scores[f"ca_{prefix}ap"] = APScorer(computation_aware=True)(instances)
@@ -442,20 +445,15 @@ def evaluate_instances(
             except Exception as e:
                 logger.warning(f"Failed to compute CA variants for latency scorers: {e}")
 
-            if not fix_emission_ca_flag and ca_aware - ca_unaware > 2000:
-                logger.warning(
-                    f"CA-YAAL ({ca_aware:.1f}) is much higher than YAAL ({ca_unaware:.1f}). "
-                    f"Consider using --fix_simuleval_emission_ca."
-                )
+            if not fix_emission_ca_flag:
+                if ca_aware_yaal and ca_unaware_yaal and (ca_aware_yaal - ca_unaware_yaal > 2000):
+                    logger.warning(
+                        f"CA-YAAL ({ca_aware_yaal:.1f}) is much higher than YAAL ({ca_unaware_yaal:.1f}). "
+                        f"Consider using --fix_simuleval_emission_ca."
+                    )
         else:
-            scores["ca_yaal"] = float("nan")
-            # mark CA variants as NaN
-            scores[f"ca_{prefix}al"] = float("nan")
-            scores[f"ca_{prefix}laal"] = float("nan")
-            scores[f"ca_{prefix}ap"] = float("nan")
-            scores[f"ca_{prefix}dal"] = float("nan")
             logger.warning(
-                "Not all instances have computation-aware timestamps. CA latency metrics set to NaN."
+                "No instances have computation-aware emission timestamps (CA)."
             )
 
     # Shortform-only degeneracy diagnostics

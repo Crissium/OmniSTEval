@@ -181,10 +181,14 @@ def fix_emission_ca(words: List[Word]) -> List[Word]:
     """
     new_emission_ca = []
     for i, word in enumerate(words):
-        assert word.emission_ca is not None and word.emission_cu is not None, \
-            "Words must have both emission_ca and emission_cu to fix timestamps."
         if i > 0:
-            new_emission_ca.append(word.emission_ca - words[i - 1].emission_ca + words[i - 1].emission_cu)
+            if word.emission_ca is None or words[i - 1].emission_ca is None or words[i - 1].emission_cu is None:
+                raise ValueError(
+                    f"Cannot fix emission_ca for word index {i} because of missing values: "
+                    f"current emission_ca={word.emission_ca}, previous emission_ca={words[i - 1].emission_ca}, "
+                    f"previous emission_cu={words[i - 1].emission_cu}"
+                )
+            new_emission_ca.append(word.emission_ca - words[i - 1].emission_ca + words[i - 1].emission_cu)  # type: ignore
         else:
             new_emission_ca.append(word.emission_ca)
     for i, word in enumerate(words):
@@ -192,7 +196,11 @@ def fix_emission_ca(words: List[Word]) -> List[Word]:
             word.emission_ca = new_emission_ca[i]
         else:
             prev_emission_ca = words[i - 1].emission_ca
-            assert prev_emission_ca is not None, "Previous word must have emission_ca set."
+            if new_emission_ca[i] is None or prev_emission_ca is None:
+                raise ValueError(
+                    f"Cannot set emission_ca for word index {i} because of missing values: "
+                    f"new_emission_ca={new_emission_ca[i]}, previous emission_ca={prev_emission_ca}"
+                )
             word.emission_ca = max(new_emission_ca[i], prev_emission_ca)
     return words
 
@@ -204,7 +212,7 @@ def load_hypothesis_jsonl(
     fix_emission_ca_flag: bool,
     emission_cu_key: str = "delays",
     emission_ca_key: str = "elapsed",
-) -> Tuple[List[List[Word]], bool]:
+) -> List[List[Word]]:
     """
     Load hypothesis from a JSONL file (SimulEval output format).
 
@@ -219,7 +227,7 @@ def load_hypothesis_jsonl(
         emission_ca_key: JSON key for computation-aware emission timestamps (default: 'elapsed').
 
     Returns:
-        Tuple of (words, all_have_emission_ca) where words is grouped by recording.
+        List of lists of Word objects, where each inner list corresponds to a recording.
     """
     hypotheses: Dict[str, dict] = {}
     source_lengths: Dict[str, float] = {}
@@ -239,24 +247,33 @@ def load_hypothesis_jsonl(
     ordered_hyps = [hypotheses[name] for name in segmentation_order]
     ordered_lengths = [source_lengths[name] for name in segmentation_order]
 
-    all_have_emission_ca = all(emission_ca_key in h for h in ordered_hyps)
-
+    num_with_ca = sum(1 for h in ordered_hyps if emission_ca_key in h)
+    num_with_cu = sum(1 for h in ordered_hyps if emission_cu_key in h)
+    if num_with_ca > 0 and num_with_ca < len(ordered_hyps):
+        raise ValueError(f"Some hypotheses have {emission_ca_key} but not all. Found {num_with_ca} with {emission_ca_key} out of {len(ordered_hyps)}.")
+    if num_with_cu > 0 and num_with_cu < len(ordered_hyps):
+        raise ValueError(f"Some hypotheses have {emission_cu_key} but not all. Found {num_with_cu} with {emission_cu_key} out of {len(ordered_hyps)}.")
+    
     words: List[List[Word]] = []
     for i, (h, rec_length) in enumerate(zip(ordered_hyps, ordered_lengths)):
         prediction = unicode_normalize(h["prediction"])
         units = list(prediction) if char_level else prediction.split()
-        cu_values = h[emission_cu_key]
-        assert len(units) == len(cu_values), \
-            (f"Number of units and {emission_cu_key} do not match for hypothesis {i}: "
-             f"{len(units)} vs {len(cu_values)}")
 
-        if emission_ca_key not in h:
-            ca_values = list(cu_values)
+        if emission_cu_key in h:
+            cu_values = h[emission_cu_key]
+            assert len(units) == len(cu_values), \
+                (f"Number of units and {emission_cu_key} do not match for hypothesis {i}: "
+                f"{len(units)} vs {len(cu_values)}")
         else:
+            cu_values = [None] * len(units)
+
+        if emission_ca_key in h:
             ca_values = h[emission_ca_key]
-        assert len(units) == len(ca_values), \
-            (f"Number of units and {emission_ca_key} do not match for hypothesis {i}: "
-             f"{len(units)} vs {len(ca_values)}")
+            assert len(units) == len(ca_values), \
+                (f"Number of units and {emission_ca_key} do not match for hypothesis {i}: "
+                f"{len(units)} vs {len(ca_values)}")
+        else:
+            ca_values = [None] * len(units)
 
         instance_words = [
             Word(unit, emission_cu=emission_cu, emission_ca=emission_ca, recording_length=rec_length)
@@ -266,7 +283,7 @@ def load_hypothesis_jsonl(
             instance_words = fix_emission_ca(instance_words)
         words.append(instance_words)
 
-    return words, all_have_emission_ca
+    return words
 
 
 def load_hypothesis_simulstream(
@@ -274,7 +291,7 @@ def load_hypothesis_simulstream(
     eval_config_file: str,
     char_level: bool,
     segmentation_order: List[str],
-) -> Tuple[List[List[Word]], bool]:
+) -> List[List[Word]]:
     try:
         logger.info("Loading SimulStream log with config: %s", eval_config_file)
         from simulstream.metrics.readers import LogReader
@@ -283,7 +300,6 @@ def load_hypothesis_simulstream(
         raise ImportError("Simulstream requires the 'simulstream' package. Install with: pip install simulstream")
 
     words: List[List[Word]] = []
-    all_have_emission_ca = True
 
     eval_config = yaml_config(eval_config_file)
 
@@ -338,7 +354,7 @@ def load_hypothesis_simulstream(
     # Reorder `words` to match `segmentation_order`
     reordered_words = [words[name_to_index[wav]] for wav in segmentation_order]
 
-    return reordered_words, all_have_emission_ca
+    return reordered_words
 
 
 def load_hypothesis_text(
@@ -443,6 +459,6 @@ def load_text_segmentation(
     for i, (seg, ref_sentence) in enumerate(zip(segmentation, reference_sentences)):
         ref_sentence_lower = ref_sentence.strip().lower()
         units = list(ref_sentence_lower) if char_level else ref_sentence_lower.split()
-        words[seg["doc_id"]].extend([Word(unit, emission_cu=0.0, seq_id=i) for unit in units])
+        words[seg["doc_id"]].extend([Word(unit, seq_id=i) for unit in units])
 
     return words, segmentation, reference_sentences, num_documents

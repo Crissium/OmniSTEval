@@ -42,7 +42,6 @@ def resegment(
     *,
     char_level: bool = False,
     lang: Optional[str] = None,
-    has_emission_timestamps: bool = False,
 ) -> Tuple[List[Instance], List[dict]]:
     """
     Align hypothesis words to reference segments and build resegmented instances.
@@ -58,7 +57,6 @@ def resegment(
         ref_sentences: Reference sentence strings (one per segment).
         char_level: Whether to use character-level alignment and scoring.
         lang: Language code for Moses tokenizer (None to skip tokenization).
-        has_emission_timestamps: Whether hypothesis words carry emission timestamps.
 
     Returns:
         Tuple of (instances, instances_dicts) where instances is a list of
@@ -99,9 +97,15 @@ def resegment(
         }
         if seg["duration"] is not None and seg["duration"] > 0:
             seg_dict["source_length"] = seg["duration"]
-        if has_emission_timestamps:
+        any_emission = False
+        if new_seg and all(w.emission_cu is not None for w in new_seg):
             seg_dict["emission_cu"] = [w.emission_cu - seg["offset"] for w in new_seg]
+            any_emission = True
+        
+        if new_seg and all(w.emission_ca is not None for w in new_seg):
             seg_dict["emission_ca"] = [w.emission_ca - seg["offset"] for w in new_seg]
+            any_emission = True
+        if any_emission:
             seg_dict["time_to_recording_end"] = recording_length - seg["offset"]
 
         instances_dict_list.append(seg_dict)
