@@ -8,4 +8,5 @@ omnisteval longform \
   --hypothesis_format simulstream \
   --lang de \
   --bleu_tokenizer 13a \
+  --word_level \
   --output_folder segmentation_output

@@ -33,4 +33,8 @@ Scores
 
   *** Likely Degenerate Simultaneous Policy ***
 
+Instance-level Details
+----------------------------------------------------------------
+Empty Predictions: 0
+Total Instances:   2580
 ================================================================

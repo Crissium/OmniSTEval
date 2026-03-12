@@ -230,9 +230,10 @@ omnisteval longform \
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `--output_folder` | No | — | Directory where output files will be written. When omitted, the evaluation report is printed to stdout only — no files are saved. |
-| `--char_level` | No | `False` | Use character-level alignment and scoring instead of word-level. |
-| `--no-quality` | No | `False` | Disable quality metrics (BLEU, chrF, COMET). |
-| `--no-latency` | No | `False` | Disable latency metrics (YAAL). Automatically set for text-only hypotheses. |
+| `--char_level` | One of these | `False` | Use character-level alignment and scoring instead of word-level. |
+| `--word_level` | One of these | `False` | Use word-level alignment and scoring instead of character-level. |
+| `--no_quality` | No | `False` | Disable quality metrics (BLEU, chrF, COMET). |
+| `--no_latency` | No | `False` | Disable latency metrics (YAAL). Automatically set for text-only hypotheses. |
 | `--comet` | No | `False` | Enable COMET scoring. Requires `--source_sentences_file` and `unbabel-comet`. |
 | `--comet_model` | No | `Unbabel/wmt22-comet-da` | COMET model name. |
 | `--bleu_tokenizer` | No | `13a` | Tokenizer for SacreBLEU (e.g., `13a`, `intl`, `ja-mecab`, `zh`). |

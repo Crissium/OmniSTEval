@@ -7,4 +7,5 @@ omnisteval longform \
   --hypothesis_format text \
   --lang en \
   --bleu_tokenizer 13a \
+  --word_level \
   --output_folder segmentation_output 

@@ -7,5 +7,6 @@ omnisteval longform \
   --hypothesis_format jsonl \
   --lang de \
   --bleu_tokenizer 13a \
+  --word_level \
   --output_folder segmentation_output \
   --fix_simuleval_emission_ca

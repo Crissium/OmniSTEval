@@ -183,13 +183,13 @@ def _add_metric_args(parser):
     """Add metric-selection arguments (shared by both subcommands)."""
     group = parser.add_argument_group("Metrics")
     group.add_argument(
-        "--no-quality",
+        "--no_quality",
         action="store_true",
         default=False,
         help="Disable quality metrics (BLEU, chrF, COMET).",
     )
     group.add_argument(
-        "--no-latency",
+        "--no_latency",
         action="store_true",
         default=False,
         help="Disable latency metrics (YAAL).",
@@ -259,6 +259,11 @@ def _add_processing_args(parser):
         "--char_level",
         action="store_true",
         help="Use character-level alignment and scoring instead of word-level.",
+    )
+    group.add_argument(
+        "--word_level",
+        action="store_true",
+        help="Use word-level alignment and scoring instead of character-level.",
     )
     group.add_argument(
         "--fix_simuleval_emission_ca",
@@ -438,7 +443,7 @@ def _run_shortform(parser, args):
     if args.comet and args.source_sentences_file is None:
         parser.error("--source_sentences_file is required when --comet is enabled.")
     if args.comet and args.no_quality:
-        logger.warning("--comet is ignored when --no-quality is set.")
+        logger.warning("--comet is ignored when --no_quality is set.")
 
     instances = load_shortform_instances(
         args.hypothesis_file,
@@ -490,7 +495,7 @@ def _run_longform(parser, args):
     if args.comet and args.source_sentences_file is None:
         parser.error("--source_sentences_file is required when --comet is enabled.")
     if args.comet and args.no_quality:
-        logger.warning("--comet is ignored when --no-quality is set.")
+        logger.warning("--comet is ignored when --no_quality is set.")
 
     # Load source sentences (optional)
     source_sentences = None
@@ -619,6 +624,12 @@ def main():
     if args.subcommand is None:
         parser.print_help()
         parser.exit(1)
+
+    if args.char_level and args.word_level:
+        parser.error("--char_level and --word_level are mutually exclusive.")
+
+    if not args.char_level and not args.word_level:
+        parser.error("One of --char_level or --word_level must be specified.")
 
     if args.subcommand == "shortform":
         _run_shortform(parser, args)
